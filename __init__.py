@@ -49,6 +49,15 @@ try:
         from .cppl import SupportCppl
     else:
         SupportCppl = SupportSC.load_module_f(__file__, 'cppl').SupportCppl
+        _orig_change_curl = SupportCppl.change_curl
+        def _patched_change_curl(curl):
+            if curl and "-b '" in curl:
+                curl = curl.replace("-b '", "-H 'cookie: ")
+            elif curl and '-b "' in curl:
+                curl = curl.replace('-b "', '-H "cookie: ')
+            return _orig_change_curl(curl)
+        SupportCppl.change_curl = _patched_change_curl
+
 except Exception:
     print(traceback.format_exc())
 
