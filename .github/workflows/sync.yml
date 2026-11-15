@@ -1,0 +1,47 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 매일 UTC 00:23 (한국시간 오전 09:23)
+    - cron: '23 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_URL: https://github.com/flaskfarm/support_site.git
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge upstream
+        run: |
+          git fetch --quiet "$UPSTREAM_URL" main
+          if git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            echo "상류에 새 커밋이 없습니다."
+            exit 0
+          fi
+          echo "상류 새 커밋 $(git rev-list --count HEAD..FETCH_HEAD)개"
+          git merge --no-edit -m "chore(sync): merge upstream flaskfarm/support_site" FETCH_HEAD || {
+            echo "::error::상류와 로컬 패치가 충돌합니다. 직접 병합해 주세요: $(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+            git merge --abort
+            exit 1
+          }
+
+      # 병합 결과가 문법 오류 없이 읽히는지 확인한 뒤에만 올린다 (서버가 이 저장소를 그대로 받아 쓴다)
+      - name: Python syntax check
+        run: python3 -m compileall -q -x '/\.git/' .
+
+      - name: Push
+        run: git push origin HEAD:main
